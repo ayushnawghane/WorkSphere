@@ -72,8 +72,13 @@ export function PunchScreen() {
     setLocating(true);
     try {
       const coords = await getCurrentPosition();
-      setPendingCoords(coords);
-      setCameraOpen(true);
+      if (profile?.punch_type === "selfie") {
+        setPendingCoords(coords);
+        setCameraOpen(true);
+      } else {
+        // "app" (default) punch type — single tap, no camera step at all.
+        await submitPunch(coords);
+      }
     } catch (err) {
       show(err instanceof Error ? err.message : "Couldn't get your location.", "error");
     } finally {
@@ -81,13 +86,12 @@ export function PunchScreen() {
     }
   };
 
-  const submitPunch = async (photo?: File) => {
-    if (!pendingCoords) return;
+  const submitPunch = async (coords: Coords, photo?: File) => {
     setSubmitting(true);
     try {
       const formData = new FormData();
-      formData.append("lat", String(pendingCoords.lat));
-      formData.append("lng", String(pendingCoords.lng));
+      formData.append("lat", String(coords.lat));
+      formData.append("lng", String(coords.lng));
       if (photo) formData.append("photo", photo);
 
       const res = await fetch("/api/attendance/punch", { method: "POST", body: formData });
@@ -218,8 +222,8 @@ export function PunchScreen() {
       <CameraCapture
         open={cameraOpen}
         title={punchedInOnly ? "Punch out selfie" : "Punch in selfie"}
-        onCapture={(file) => submitPunch(file)}
-        onSkip={() => submitPunch()}
+        onCapture={(file) => pendingCoords && submitPunch(pendingCoords, file)}
+        onSkip={() => pendingCoords && submitPunch(pendingCoords)}
         onClose={() => {
           setCameraOpen(false);
           setPendingCoords(null);

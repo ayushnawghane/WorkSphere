@@ -39,9 +39,12 @@ export interface Database {
           id: string;
           employee_code: string;
           full_name: string;
+          phone: string | null;
           branch_id: string | null;
           location_required: boolean;
           is_active: boolean;
+          role: "employee" | "admin";
+          punch_type: "app" | "selfie";
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["profiles"]["Row"]> & {

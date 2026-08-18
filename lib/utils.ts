@@ -27,11 +27,22 @@ export function formatWeekday(iso: string | Date): string {
   return d.toLocaleDateString("en-US", { weekday: "short" });
 }
 
-/** Local (not UTC) YYYY-MM-DD — matches the `attendance_date` column. */
+/**
+ * Today's date in Asia/Kolkata as YYYY-MM-DD — matches the
+ * `attendance_date` column. Always IST regardless of the server's own
+ * timezone (Vercel functions run in UTC), so a punch at, say, 1am IST
+ * files under the correct IST calendar day rather than the previous UTC day.
+ */
 export function todayLocalDate(): string {
-  const now = new Date();
-  const offset = now.getTimezoneOffset() * 60000;
-  return new Date(now.getTime() - offset).toISOString().slice(0, 10);
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const get = (type: string) => parts.find((p) => p.type === type)!.value;
+  return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
 export function workedHours(punchIn: string | null, punchOut: string | null): string {

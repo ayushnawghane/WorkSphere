@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { User, Building2, MapPinned, LogOut, BadgeCheck } from "lucide-react";
+import { User, Building2, MapPinned, LogOut, BadgeCheck, KeyRound } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Sheet } from "@/components/ui/Sheet";
+import { Field, inputClass } from "@/components/ui/Field";
+import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
 import type { Branch, Profile } from "@/lib/database.types";
 
@@ -15,6 +18,7 @@ export function ProfileScreen() {
   const [branch, setBranch] = useState<Branch | null>(null);
   const [loading, setLoading] = useState(true);
   const [signingOut, setSigningOut] = useState(false);
+  const [passwordSheetOpen, setPasswordSheetOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -77,10 +81,58 @@ export function ProfileScreen() {
         />
       </Card>
 
+      <Button variant="secondary" fullWidth onClick={() => setPasswordSheetOpen(true)}>
+        <KeyRound className="size-4" /> Change password
+      </Button>
+
       <Button variant="secondary" fullWidth loading={signingOut} onClick={signOut}>
         <LogOut className="size-4" /> Sign out
       </Button>
+
+      <ChangePasswordSheet open={passwordSheetOpen} onClose={() => setPasswordSheetOpen(false)} />
     </div>
+  );
+}
+
+function ChangePasswordSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { show } = useToast();
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.updateUser({ password });
+    setSubmitting(false);
+    if (error) {
+      show(error.message, "error");
+      return;
+    }
+    show("Password updated", "success");
+    setPassword("");
+    onClose();
+  };
+
+  return (
+    <Sheet open={open} title="Change password" onClose={onClose}>
+      <form onSubmit={submit} className="flex flex-col gap-3">
+        <Field label="New password">
+          <input
+            className={inputClass}
+            type="password"
+            minLength={6}
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+        </Field>
+        <Button type="submit" fullWidth loading={submitting}>
+          Update password
+        </Button>
+      </form>
+    </Sheet>
   );
 }
 

@@ -9,6 +9,9 @@
 // SUPABASE_DB_POOLER_USER in the environment — get these from Supabase's
 // "Connect" dialog -> Session pooler tab (host/user) and the database
 // password you set when creating the project.
+//
+// Tracks applied filenames in public._migrations so re-running only picks
+// up new files — each file runs once, in a transaction, ever.
 import { readdirSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,14 +47,36 @@ try {
   await client.connect();
   console.log(`Connected to ${poolerHost}`);
 
+  await client.query(`
+    create table if not exists public._migrations (
+      filename text primary key,
+      applied_at timestamptz not null default now()
+    );
+  `);
+
+  const { rows: appliedRows } = await client.query(`select filename from public._migrations;`);
+  const applied = new Set(appliedRows.map((r) => r.filename));
+
+  let ranAny = false;
   for (const file of files) {
+    if (applied.has(file)) continue;
+    ranAny = true;
+
     const sql = readFileSync(join(DB_DIR, file), "utf8");
     process.stdout.write(`Applying ${file}... `);
-    await client.query(sql);
-    console.log("done");
+    await client.query("begin");
+    try {
+      await client.query(sql);
+      await client.query(`insert into public._migrations (filename) values ($1);`, [file]);
+      await client.query("commit");
+      console.log("done");
+    } catch (err) {
+      await client.query("rollback");
+      throw err;
+    }
   }
 
-  console.log("\nAll migrations applied successfully.");
+  console.log(ranAny ? "\nAll new migrations applied successfully." : "\nNothing to apply — already up to date.");
 } catch (err) {
   console.error("\nMigration failed:", err.message);
   process.exitCode = 1;

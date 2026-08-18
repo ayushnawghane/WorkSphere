@@ -11,10 +11,9 @@ npm run migrate
 
 That runs `scripts/run-migrations.mjs`, which connects directly to Postgres
 via the session pooler (see `.env.example` for the required
-`SUPABASE_DB_*` vars) and applies every file in `db/` in order. Re-running
-it is safe — `002`/`003`/`005` use `if not exists` / `on conflict do
-nothing`; `004`'s `create policy` statements are the only non-idempotent
-part (they'll error if a policy already exists, harmlessly).
+`SUPABASE_DB_*` vars) and applies every file in `db/` in order — tracked in
+a `public._migrations` table, so each file only ever runs once. Re-running
+`npm run migrate` after adding a new file only applies the new one.
 
 | File | Purpose |
 |---|---|
@@ -23,6 +22,9 @@ part (they'll error if a policy already exists, harmlessly).
 | `003_updated_at_trigger.sql` | Auto-updates `attendance.updated_at` on punch-out. |
 | `004_rls_policies.sql` | Table grants for `authenticated` + Row Level Security so employees can only read/write their own data. |
 | `005_storage.sql` | Private `punch-photos` storage bucket + per-employee folder policies. |
+| `006_admin.sql` | `profiles.role` (`employee`/`admin`), `is_admin()` helper, admin-scoped RLS for the admin area. |
+| `007_punch_type.sql` | `profiles.punch_type` (`app`/`selfie`) — per-employee control over whether punching in/out asks for a selfie. |
+| `008_employee_phone.sql` | `profiles.phone` — phone number in the employee master, alongside name/email/employee code. |
 
 ## Notes
 
