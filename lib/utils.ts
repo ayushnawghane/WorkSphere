@@ -59,3 +59,48 @@ export const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
+
+export const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/** Weekday (0=Sun..6=Sat) of a plain YYYY-MM-DD date — timezone-independent,
+ * since a calendar date's weekday doesn't depend on where you observe it from. */
+export function weekdayOf(dateStr: string): number {
+  return new Date(`${dateStr}T00:00:00Z`).getUTCDay();
+}
+
+/** Minutes since midnight, in IST, for a UTC ISO timestamp. */
+export function istMinutesSinceMidnight(iso: string): number {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(iso));
+  const get = (type: string) => Number(parts.find((p) => p.type === type)!.value);
+  return get("hour") * 60 + get("minute");
+}
+
+/** "09:30:00" -> 570 */
+export function timeStringToMinutes(time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}
+
+/** "09:30:00" -> "9:30 AM" */
+export function formatTimeOfDay(time: string): string {
+  const minutes = timeStringToMinutes(time);
+  const h24 = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const period = h24 >= 12 ? "PM" : "AM";
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
+}
+
+export function formatWorkingDays(days: number[]): string {
+  if (days.length === 0) return "Not set";
+  if (days.length === 7) return "Every day";
+  return [...days]
+    .sort((a, b) => a - b)
+    .map((d) => WEEKDAY_LABELS[d])
+    .join(", ");
+}

@@ -1,8 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Attendance, Database } from "@/lib/database.types";
+import { istMinutesSinceMidnight, timeStringToMinutes, weekdayOf } from "@/lib/utils";
 
 const PHOTO_BUCKET = "punch-photos";
 const SIGNED_URL_TTL_SECONDS = 3600;
+const LATE_GRACE_MINUTES = 10;
 
 /**
  * `attendance.punch_in_photo_url` / `punch_out_photo_url` store the storage
@@ -40,3 +42,105 @@ export async function withSignedPhotoUrls(
 }
 
 export { PHOTO_BUCKET };
+
+export type DayStatus = "present" | "incomplete" | "absent" | "off";
+
+export interface DayEntry {
+  date: string;
+  status: DayStatus;
+  attendance: Attendance | null;
+  isLate: boolean;
+}
+
+export interface MonthSummary {
+  presentDays: number;
+  incompleteDays: number;
+  absentDays: number;
+  lateDays: number;
+  totalHours: string;
+}
+
+/**
+ * Builds every calendar day of the month (ascending) tagged with a status —
+ * present / incomplete / absent (a working day per the branch's
+ * working_days with no punch) / off (non-working day, before the employee
+ * existed, or still in the future) — plus a late flag and a summary.
+ *
+ * Known gap: there's no holiday calendar yet, so a real holiday currently
+ * shows as "absent" like any other working day with no punch. Fine for now,
+ * worth revisiting once holidays are modeled.
+ */
+export function buildMonthAttendance({
+  year,
+  month,
+  workingDays,
+  workStartTime,
+  joinedDate,
+  todayIST,
+  rows,
+}: {
+  year: number;
+  month: number; // 1-12
+  workingDays: number[];
+  workStartTime: string | null;
+  joinedDate: string;
+  todayIST: string;
+  rows: Attendance[];
+}): { days: DayEntry[]; summary: MonthSummary } {
+  const byDate = new Map(rows.map((r) => [r.attendance_date, r]));
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const workStartMinutes = workStartTime ? timeStringToMinutes(workStartTime) : null;
+
+  const days: DayEntry[] = [];
+  let presentDays = 0;
+  let incompleteDays = 0;
+  let absentDays = 0;
+  let lateDays = 0;
+  let totalMinutes = 0;
+
+  for (let d = 1; d <= lastDay; d++) {
+    const date = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    const attendance = byDate.get(date) ?? null;
+    const isWorkingDay = workingDays.includes(weekdayOf(date));
+    const isFuture = date > todayIST;
+    const isBeforeJoined = date < joinedDate;
+
+    let isLate = false;
+    if (attendance?.punch_in && workStartMinutes !== null) {
+      isLate = istMinutesSinceMidnight(attendance.punch_in) > workStartMinutes + LATE_GRACE_MINUTES;
+    }
+
+    let status: DayStatus;
+    if (attendance?.punch_in && attendance?.punch_out) {
+      status = "present";
+      presentDays += 1;
+      totalMinutes += Math.max(
+        0,
+        Math.floor((new Date(attendance.punch_out).getTime() - new Date(attendance.punch_in).getTime()) / 60000)
+      );
+    } else if (attendance?.punch_in) {
+      status = "incomplete";
+      incompleteDays += 1;
+    } else if (isWorkingDay && !isFuture && !isBeforeJoined) {
+      status = "absent";
+      absentDays += 1;
+    } else {
+      status = "off";
+    }
+
+    if (isLate) lateDays += 1;
+
+    days.push({ date, status, attendance, isLate });
+  }
+
+  return {
+    days,
+    summary: {
+      presentDays,
+      incompleteDays,
+      absentDays,
+      lateDays,
+      totalHours: (totalMinutes / 60).toFixed(1),
+    },
+  };
+}

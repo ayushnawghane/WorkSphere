@@ -18,6 +18,9 @@ export async function PATCH(
   if (body.latitude !== undefined) update.latitude = Number(body.latitude);
   if (body.longitude !== undefined) update.longitude = Number(body.longitude);
   if (body.radius_meters !== undefined) update.radius_meters = Number(body.radius_meters);
+  if (body.working_days !== undefined) update.working_days = body.working_days.map(Number);
+  if (body.work_start_time !== undefined) update.work_start_time = body.work_start_time;
+  if (body.work_end_time !== undefined) update.work_end_time = body.work_end_time;
   if (body.is_active !== undefined) update.is_active = Boolean(body.is_active);
 
   if (

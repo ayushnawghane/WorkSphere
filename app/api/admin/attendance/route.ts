@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/supabase/require-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { buildMonthAttendance } from "@/lib/attendance";
+import { todayLocalDate } from "@/lib/utils";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAdmin();
@@ -19,70 +21,53 @@ export async function GET(request: NextRequest) {
 
   const admin = createAdminClient();
 
-  let query = admin
-    .from("attendance")
-    .select("*")
-    .gte("attendance_date", startDate)
-    .lte("attendance_date", endDate)
-    .order("attendance_date", { ascending: false });
+  const [{ data: profiles, error: profilesError }, { data: branches }, { data: rows, error: rowsError }] =
+    await Promise.all([
+      admin.from("profiles").select("*").order("full_name"),
+      admin.from("branches").select("*"),
+      admin.from("attendance").select("*").gte("attendance_date", startDate).lte("attendance_date", endDate),
+    ]);
 
-  if (branchId) query = query.eq("branch_id", branchId);
-  if (employeeId) query = query.eq("user_id", employeeId);
-
-  const [{ data: rows, error }, { data: profiles }] = await Promise.all([
-    query,
-    admin.from("profiles").select("id, full_name, employee_code"),
-  ]);
-
-  if (error) {
+  if (profilesError || rowsError) {
     return NextResponse.json({ msg: "Could not load attendance" }, { status: 500 });
   }
 
-  const attendance = rows ?? [];
-  const nameById = new Map((profiles ?? []).map((p) => [p.id, p]));
+  const branchById = new Map((branches ?? []).map((b) => [b.id, b]));
+  const rowsByUser = new Map<string, typeof rows>();
+  (rows ?? []).forEach((r) => {
+    if (!rowsByUser.has(r.user_id)) rowsByUser.set(r.user_id, []);
+    rowsByUser.get(r.user_id)!.push(r);
+  });
 
-  const withNames = attendance.map((r) => ({
-    ...r,
-    employee_name: nameById.get(r.user_id)?.full_name ?? "Unknown",
-    employee_code: nameById.get(r.user_id)?.employee_code ?? "",
-  }));
+  const relevantProfiles = (profiles ?? []).filter((p) => {
+    if (employeeId && p.id !== employeeId) return false;
+    if (branchId && p.branch_id !== branchId) return false;
+    return true;
+  });
 
-  const summaryByEmployee = new Map<
-    string,
-    { employee_name: string; employee_code: string; presentDays: number; incompleteDays: number; totalMinutes: number }
-  >();
+  const todayIST = todayLocalDate();
 
-  for (const row of withNames) {
-    const key = row.user_id;
-    if (!summaryByEmployee.has(key)) {
-      summaryByEmployee.set(key, {
-        employee_name: row.employee_name,
-        employee_code: row.employee_code,
-        presentDays: 0,
-        incompleteDays: 0,
-        totalMinutes: 0,
-      });
-    }
-    const s = summaryByEmployee.get(key)!;
-    if (row.punch_in && row.punch_out) {
-      s.presentDays += 1;
-      s.totalMinutes += Math.max(
-        0,
-        Math.floor((new Date(row.punch_out).getTime() - new Date(row.punch_in).getTime()) / 60000)
-      );
-    } else if (row.punch_in) {
-      s.incompleteDays += 1;
-    }
-  }
+  const employees = relevantProfiles.map((profile) => {
+    const branch = profile.branch_id ? branchById.get(profile.branch_id) : null;
+    const { days, summary } = buildMonthAttendance({
+      year,
+      month,
+      workingDays: branch?.working_days ?? [],
+      workStartTime: branch?.work_start_time ?? null,
+      joinedDate: profile.created_at.slice(0, 10),
+      todayIST,
+      rows: rowsByUser.get(profile.id) ?? [],
+    });
 
-  const summary = Array.from(summaryByEmployee.entries()).map(([userId, s]) => ({
-    user_id: userId,
-    employee_name: s.employee_name,
-    employee_code: s.employee_code,
-    presentDays: s.presentDays,
-    incompleteDays: s.incompleteDays,
-    totalHours: (s.totalMinutes / 60).toFixed(1),
-  }));
+    return {
+      user_id: profile.id,
+      employee_name: profile.full_name,
+      employee_code: profile.employee_code,
+      branch_name: branch?.name ?? null,
+      days,
+      summary,
+    };
+  });
 
-  return NextResponse.json({ year, month, attendance: withNames, summary });
+  return NextResponse.json({ year, month, employees });
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { PHOTO_BUCKET } from "@/lib/attendance";
+import { PHOTO_BUCKET, buildMonthAttendance } from "@/lib/attendance";
+import { todayLocalDate } from "@/lib/utils";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -21,13 +22,27 @@ export async function GET(request: NextRequest) {
   const endDay = new Date(year, month, 0).getDate(); // last day of that month
   const endDate = `${year}-${String(month).padStart(2, "0")}-${String(endDay).padStart(2, "0")}`;
 
-  const { data: rows, error } = await supabase
-    .from("attendance")
+  const { data: profile } = await supabase
+    .from("profiles")
     .select("*")
-    .eq("user_id", user.id)
-    .gte("attendance_date", startDate)
-    .lte("attendance_date", endDate)
-    .order("attendance_date", { ascending: false });
+    .eq("id", user.id)
+    .single();
+
+  if (!profile) {
+    return NextResponse.json({ msg: "Profile not found" }, { status: 404 });
+  }
+
+  const [{ data: branch }, { data: rows, error }] = await Promise.all([
+    profile.branch_id
+      ? supabase.from("branches").select("*").eq("id", profile.branch_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    supabase
+      .from("attendance")
+      .select("*")
+      .eq("user_id", user.id)
+      .gte("attendance_date", startDate)
+      .lte("attendance_date", endDate),
+  ]);
 
   if (error) {
     return NextResponse.json({ msg: "Could not load attendance history" }, { status: 500 });
@@ -60,22 +75,15 @@ export async function GET(request: NextRequest) {
       : null,
   }));
 
-  const presentDays = attendance.filter((r) => r.punch_in && r.punch_out).length;
-  const incompleteDays = attendance.filter((r) => r.punch_in && !r.punch_out).length;
-  const totalMinutes = attendance.reduce((sum, r) => {
-    if (!r.punch_in || !r.punch_out) return sum;
-    const ms = new Date(r.punch_out).getTime() - new Date(r.punch_in).getTime();
-    return sum + Math.max(0, Math.floor(ms / 60000));
-  }, 0);
-
-  return NextResponse.json({
+  const { days, summary } = buildMonthAttendance({
     year,
     month,
-    attendance: withPhotos,
-    summary: {
-      presentDays,
-      incompleteDays,
-      totalHours: (totalMinutes / 60).toFixed(1),
-    },
+    workingDays: branch?.working_days ?? [],
+    workStartTime: branch?.work_start_time ?? null,
+    joinedDate: profile.created_at.slice(0, 10),
+    todayIST: todayLocalDate(),
+    rows: withPhotos,
   });
+
+  return NextResponse.json({ year, month, days: [...days].reverse(), summary });
 }

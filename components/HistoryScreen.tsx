@@ -7,13 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { AttendanceDayCard } from "@/components/AttendanceDayCard";
 import { MONTH_NAMES } from "@/lib/utils";
-import type { Attendance } from "@/lib/database.types";
-
-interface Summary {
-  presentDays: number;
-  incompleteDays: number;
-  totalHours: string;
-}
+import type { DayEntry, MonthSummary } from "@/lib/attendance";
 
 const now = new Date();
 const YEAR_OPTIONS = [now.getFullYear() - 2, now.getFullYear() - 1, now.getFullYear()];
@@ -22,8 +16,8 @@ export function HistoryScreen() {
   const router = useRouter();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
-  const [rows, setRows] = useState<Attendance[]>([]);
-  const [summary, setSummary] = useState<Summary | null>(null);
+  const [days, setDays] = useState<DayEntry[]>([]);
+  const [summary, setSummary] = useState<MonthSummary | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -38,7 +32,7 @@ export function HistoryScreen() {
       }
       const data = await res.json();
       if (cancelled) return;
-      setRows(data.attendance ?? []);
+      setDays(data.days ?? []);
       setSummary(data.summary ?? null);
       setLoading(false);
     })();
@@ -47,6 +41,8 @@ export function HistoryScreen() {
       cancelled = true;
     };
   }, [year, month, router]);
+
+  const visibleDays = days.filter((d) => d.status !== "off");
 
   return (
     <div className="flex flex-col gap-5 px-5 pt-6">
@@ -90,24 +86,30 @@ export function HistoryScreen() {
           <span className="text-[11px] text-[var(--text-muted)]">Present</span>
         </Card>
         <Card className="flex flex-col items-center gap-0.5 py-3">
-          <span className="text-lg font-bold text-amber-600 dark:text-amber-400">
-            {loading ? <Skeleton className="h-6 w-8" /> : summary?.incompleteDays ?? 0}
+          <span className="text-lg font-bold text-rose-600 dark:text-rose-400">
+            {loading ? <Skeleton className="h-6 w-8" /> : summary?.absentDays ?? 0}
           </span>
-          <span className="text-[11px] text-[var(--text-muted)]">Incomplete</span>
+          <span className="text-[11px] text-[var(--text-muted)]">Absent</span>
         </Card>
         <Card className="flex flex-col items-center gap-0.5 py-3">
-          <span className="text-lg font-bold text-brand-600 dark:text-brand-300">
-            {loading ? <Skeleton className="h-6 w-10" /> : `${summary?.totalHours ?? 0}h`}
+          <span className="text-lg font-bold text-orange-600 dark:text-orange-400">
+            {loading ? <Skeleton className="h-6 w-8" /> : summary?.lateDays ?? 0}
           </span>
-          <span className="text-[11px] text-[var(--text-muted)]">Total hrs</span>
+          <span className="text-[11px] text-[var(--text-muted)]">Late</span>
         </Card>
       </div>
+
+      {!loading && summary && (
+        <p className="-mt-2 text-center text-xs text-[var(--text-muted)]">
+          {summary.incompleteDays} incomplete · {summary.totalHours}h total
+        </p>
+      )}
 
       <div className="flex flex-col gap-2.5">
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[72px] w-full rounded-2xl" />)
-        ) : rows.length > 0 ? (
-          rows.map((row) => <AttendanceDayCard key={row.id} row={row} />)
+        ) : visibleDays.length > 0 ? (
+          visibleDays.map((entry) => <AttendanceDayCard key={entry.date} entry={entry} />)
         ) : (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
             <CalendarX className="size-10 text-slate-300 dark:text-slate-600" />

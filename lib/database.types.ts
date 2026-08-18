@@ -23,6 +23,9 @@ export interface Database {
           latitude: number;
           longitude: number;
           radius_meters: number;
+          working_days: number[];
+          work_start_time: string;
+          work_end_time: string;
           is_active: boolean;
           created_at: string;
         };

@@ -28,6 +28,9 @@ export async function POST(request: NextRequest) {
   const latitude = Number(body.latitude);
   const longitude = Number(body.longitude);
   const radius_meters = body.radius_meters ? Number(body.radius_meters) : 150;
+  const working_days = Array.isArray(body.working_days) ? body.working_days.map(Number) : [1, 2, 3, 4, 5, 6];
+  const work_start_time = body.work_start_time || "09:30:00";
+  const work_end_time = body.work_end_time || "18:30:00";
 
   if (!name || Number.isNaN(latitude) || Number.isNaN(longitude)) {
     return NextResponse.json(
@@ -39,7 +42,7 @@ export async function POST(request: NextRequest) {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("branches")
-    .insert({ name, latitude, longitude, radius_meters })
+    .insert({ name, latitude, longitude, radius_meters, working_days, work_start_time, work_end_time })
     .select("*")
     .single();
 

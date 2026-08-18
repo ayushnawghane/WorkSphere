@@ -25,6 +25,7 @@ a `public._migrations` table, so each file only ever runs once. Re-running
 | `006_admin.sql` | `profiles.role` (`employee`/`admin`), `is_admin()` helper, admin-scoped RLS for the admin area. |
 | `007_punch_type.sql` | `profiles.punch_type` (`app`/`selfie`) — per-employee control over whether punching in/out asks for a selfie. |
 | `008_employee_phone.sql` | `profiles.phone` — phone number in the employee master, alongside name/email/employee code. |
+| `009_branch_working_hours.sql` | `branches.working_days`/`work_start_time`/`work_end_time` — basis for late-mark and absent detection in reports. |
 
 ## Notes
 

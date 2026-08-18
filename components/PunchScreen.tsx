@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import { getCurrentPosition, type Coords } from "@/lib/geo";
-import { formatTime } from "@/lib/utils";
+import { formatTime, formatTimeOfDay, formatWorkingDays } from "@/lib/utils";
 import type { Attendance, Branch, Profile } from "@/lib/database.types";
 
 export function PunchScreen() {
@@ -136,10 +136,16 @@ export function PunchScreen() {
           </h1>
         )}
         {branch && (
-          <div className="mt-1 flex items-center gap-1.5 text-sm text-[var(--text-muted)]">
-            <MapPin className="size-3.5" />
-            {branch.name}
-          </div>
+          <>
+            <div className="mt-1 flex items-center gap-1.5 text-sm text-[var(--text-muted)]">
+              <MapPin className="size-3.5" />
+              {branch.name}
+            </div>
+            <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+              {formatWorkingDays(branch.working_days)} · {formatTimeOfDay(branch.work_start_time)}–
+              {formatTimeOfDay(branch.work_end_time)}
+            </p>
+          </>
         )}
       </motion.div>
 

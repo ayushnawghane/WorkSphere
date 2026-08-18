@@ -7,7 +7,8 @@ import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Sheet } from "@/components/ui/Sheet";
 import { useToast } from "@/components/ui/Toast";
-import { BranchForm, type BranchFormValues } from "@/components/admin/BranchForm";
+import { BranchForm, toDbTime, type BranchFormValues } from "@/components/admin/BranchForm";
+import { formatTimeOfDay, formatWorkingDays } from "@/lib/utils";
 import type { Branch } from "@/lib/database.types";
 
 export default function AdminBranchesPage() {
@@ -46,6 +47,9 @@ export default function AdminBranchesPage() {
       latitude: Number(values.latitude),
       longitude: Number(values.longitude),
       radius_meters: Number(values.radius_meters),
+      working_days: values.working_days,
+      work_start_time: toDbTime(values.work_start_time),
+      work_end_time: toDbTime(values.work_end_time),
     };
     const res = await fetch(editing ? `/api/admin/branches/${editing.id}` : "/api/admin/branches", {
       method: editing ? "PATCH" : "POST",
@@ -115,6 +119,10 @@ export default function AdminBranchesPage() {
                     <p className="mt-1 flex items-center gap-1 text-xs text-[var(--text-muted)]">
                       <MapPin className="size-3" />
                       {branch.latitude.toFixed(5)}, {branch.longitude.toFixed(5)} · {branch.radius_meters}m radius
+                    </p>
+                    <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                      {formatWorkingDays(branch.working_days)} · {formatTimeOfDay(branch.work_start_time)}–
+                      {formatTimeOfDay(branch.work_end_time)}
                     </p>
                   </button>
                   <button
