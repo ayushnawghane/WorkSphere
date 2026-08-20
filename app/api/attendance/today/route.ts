@@ -24,21 +24,49 @@ export async function GET() {
     return NextResponse.json({ msg: "Profile not found" }, { status: 404 });
   }
 
-  const [{ data: branch }, { data: attendance }] = await Promise.all([
-    profile.branch_id
-      ? supabase.from("branches").select("*").eq("id", profile.branch_id).maybeSingle()
-      : Promise.resolve({ data: null }),
-    supabase
-      .from("attendance")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("attendance_date", todayLocalDate())
-      .maybeSingle(),
-  ]);
+  const today = todayLocalDate();
+
+  const [{ data: branch }, { data: attendance }, { data: holidaysToday }, { data: leaveToday }] =
+    await Promise.all([
+      profile.branch_id
+        ? supabase.from("branches").select("*").eq("id", profile.branch_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+      supabase
+        .from("attendance")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("attendance_date", today)
+        .maybeSingle(),
+      supabase
+        .from("holidays")
+        .select("name, branch_id")
+        .eq("date", today)
+        .or(`branch_id.is.null${profile.branch_id ? `,branch_id.eq.${profile.branch_id}` : ""}`),
+      supabase
+        .from("leave_requests")
+        .select("leave_type_id, is_half_day")
+        .eq("user_id", user.id)
+        .eq("status", "approved")
+        .lte("start_date", today)
+        .gte("end_date", today)
+        .maybeSingle(),
+    ]);
+
+  let leaveTypeName: string | null = null;
+  if (leaveToday) {
+    const { data: leaveType } = await supabase
+      .from("leave_types")
+      .select("name")
+      .eq("id", leaveToday.leave_type_id)
+      .maybeSingle();
+    leaveTypeName = leaveType?.name ?? "Leave";
+  }
 
   return NextResponse.json({
     profile,
     branch: branch ?? null,
     attendance: attendance ? await withSignedPhotoUrls(supabase, attendance) : null,
+    holidayToday: holidaysToday?.[0]?.name ?? null,
+    leaveToday: leaveToday ? { leaveTypeName, isHalfDay: leaveToday.is_half_day } : null,
   });
 }

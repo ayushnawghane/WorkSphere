@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/supabase/require-admin";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient, fetchAllPages } from "@/lib/supabase/admin";
 
 export async function GET() {
   const auth = await requireAdmin();
@@ -8,21 +8,38 @@ export async function GET() {
 
   const admin = createAdminClient();
 
-  const [{ data: profiles, error: profilesError }, { data: branches }, usersResult] =
-    await Promise.all([
-      admin.from("profiles").select("*").order("full_name"),
-      admin.from("branches").select("id, name"),
-      admin.auth.admin.listUsers({ perPage: 1000 }),
+  // Both the profiles table and Supabase's auth admin API cap a single
+  // request at 1000 rows — fetchAllPages loops until a page comes back
+  // short so no employee is silently dropped once the org grows past that.
+  let profiles;
+  let users;
+  try {
+    [profiles, users] = await Promise.all([
+      fetchAllPages(async (page, pageSize) => {
+        const { data, error } = await admin
+          .from("profiles")
+          .select("*")
+          .order("full_name")
+          .range((page - 1) * pageSize, page * pageSize - 1);
+        if (error) throw error;
+        return data ?? [];
+      }),
+      fetchAllPages(async (page, perPage) => {
+        const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
+        if (error) throw error;
+        return data.users;
+      }),
     ]);
-
-  if (profilesError) {
+  } catch {
     return NextResponse.json({ msg: "Could not load employees" }, { status: 500 });
   }
 
-  const branchNameById = new Map((branches ?? []).map((b) => [b.id, b.name]));
-  const emailById = new Map(usersResult.data.users.map((u) => [u.id, u.email ?? null]));
+  const { data: branches } = await admin.from("branches").select("id, name");
 
-  const employees = (profiles ?? []).map((p) => ({
+  const branchNameById = new Map((branches ?? []).map((b) => [b.id, b.name]));
+  const emailById = new Map(users.map((u) => [u.id, u.email ?? null]));
+
+  const employees = profiles.map((p) => ({
     ...p,
     email: emailById.get(p.id) ?? null,
     branch_name: p.branch_id ? branchNameById.get(p.branch_id) ?? null : null,

@@ -43,13 +43,20 @@ export async function withSignedPhotoUrls(
 
 export { PHOTO_BUCKET };
 
-export type DayStatus = "present" | "incomplete" | "absent" | "off";
+export type DayStatus = "present" | "incomplete" | "absent" | "off" | "holiday" | "leave";
+
+export interface LeaveDayInfo {
+  leaveTypeName: string;
+  isHalfDay: boolean;
+}
 
 export interface DayEntry {
   date: string;
   status: DayStatus;
   attendance: Attendance | null;
   isLate: boolean;
+  holidayName: string | null;
+  leaveInfo: LeaveDayInfo | null;
 }
 
 export interface MonthSummary {
@@ -57,18 +64,27 @@ export interface MonthSummary {
   incompleteDays: number;
   absentDays: number;
   lateDays: number;
+  holidayDays: number;
+  leaveDays: number;
   totalHours: string;
 }
 
 /**
  * Builds every calendar day of the month (ascending) tagged with a status —
- * present / incomplete / absent (a working day per the branch's
- * working_days with no punch) / off (non-working day, before the employee
- * existed, or still in the future) — plus a late flag and a summary.
+ * present / incomplete / holiday / leave / absent (a working day per the
+ * branch's working_days with no punch and no holiday/approved leave) / off
+ * (non-working day, before the employee existed, or still in the future) —
+ * plus a late flag and a summary.
  *
- * Known gap: there's no holiday calendar yet, so a real holiday currently
- * shows as "absent" like any other working day with no punch. Fine for now,
- * worth revisiting once holidays are modeled.
+ * `holidays` and `approvedLeave` are pre-expanded by the caller to one entry
+ * per calendar date (date -> info) so this function stays a pure lookup —
+ * see lib/leave.ts's expandDateRange for turning a leave request's date
+ * range into per-day entries.
+ *
+ * A punch always wins over holiday/leave for the *status* (someone who
+ * actually came in and worked shows as Present/Incomplete), but
+ * holidayName/leaveInfo are still attached whenever applicable so the UI can
+ * show e.g. "Present (half-day leave)".
  */
 export function buildMonthAttendance({
   year,
@@ -78,6 +94,8 @@ export function buildMonthAttendance({
   joinedDate,
   todayIST,
   rows,
+  holidays = new Map(),
+  approvedLeave = new Map(),
 }: {
   year: number;
   month: number; // 1-12
@@ -86,6 +104,8 @@ export function buildMonthAttendance({
   joinedDate: string;
   todayIST: string;
   rows: Attendance[];
+  holidays?: Map<string, string>;
+  approvedLeave?: Map<string, LeaveDayInfo>;
 }): { days: DayEntry[]; summary: MonthSummary } {
   const byDate = new Map(rows.map((r) => [r.attendance_date, r]));
   const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
@@ -96,6 +116,8 @@ export function buildMonthAttendance({
   let incompleteDays = 0;
   let absentDays = 0;
   let lateDays = 0;
+  let holidayDays = 0;
+  let leaveDays = 0;
   let totalMinutes = 0;
 
   for (let d = 1; d <= lastDay; d++) {
@@ -104,6 +126,8 @@ export function buildMonthAttendance({
     const isWorkingDay = workingDays.includes(weekdayOf(date));
     const isFuture = date > todayIST;
     const isBeforeJoined = date < joinedDate;
+    const holidayName = holidays.get(date) ?? null;
+    const leaveInfo = approvedLeave.get(date) ?? null;
 
     let isLate = false;
     if (attendance?.punch_in && workStartMinutes !== null) {
@@ -121,6 +145,12 @@ export function buildMonthAttendance({
     } else if (attendance?.punch_in) {
       status = "incomplete";
       incompleteDays += 1;
+    } else if (holidayName) {
+      status = "holiday";
+      holidayDays += 1;
+    } else if (leaveInfo) {
+      status = "leave";
+      leaveDays += 1;
     } else if (isWorkingDay && !isFuture && !isBeforeJoined) {
       status = "absent";
       absentDays += 1;
@@ -130,7 +160,7 @@ export function buildMonthAttendance({
 
     if (isLate) lateDays += 1;
 
-    days.push({ date, status, attendance, isLate });
+    days.push({ date, status, attendance, isLate, holidayName, leaveInfo });
   }
 
   return {
@@ -140,6 +170,8 @@ export function buildMonthAttendance({
       incompleteDays,
       absentDays,
       lateDays,
+      holidayDays,
+      leaveDays,
       totalHours: (totalMinutes / 60).toFixed(1),
     },
   };

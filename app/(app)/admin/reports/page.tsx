@@ -27,6 +27,8 @@ const STATUS_LABEL: Record<DayEntry["status"], string> = {
   incomplete: "Incomplete",
   absent: "Absent",
   off: "-",
+  holiday: "Holiday",
+  leave: "Leave",
 };
 
 export default function AdminReportsPage() {
@@ -74,7 +76,13 @@ export default function AdminReportsPage() {
   // Employees whose schedule has nothing to say this month (no branch, or
   // joined after month-end) — every day is "off", so there's nothing to show.
   const visibleReports = reports.filter(
-    (r) => r.summary.presentDays + r.summary.absentDays + r.summary.incompleteDays > 0
+    (r) =>
+      r.summary.presentDays +
+        r.summary.absentDays +
+        r.summary.incompleteDays +
+        r.summary.holidayDays +
+        r.summary.leaveDays >
+      0
   );
 
   const exportCsv = () => {
@@ -123,6 +131,8 @@ export default function AdminReportsPage() {
       lines.push(["", "", "", "", esc("Present Days"), esc(emp.summary.presentDays)].join(","));
       lines.push(["", "", "", "", esc("Absent Days"), esc(emp.summary.absentDays)].join(","));
       lines.push(["", "", "", "", esc("Late Days"), esc(emp.summary.lateDays)].join(","));
+      lines.push(["", "", "", "", esc("Holiday Days"), esc(emp.summary.holidayDays)].join(","));
+      lines.push(["", "", "", "", esc("Leave Days"), esc(emp.summary.leaveDays)].join(","));
       lines.push(["", "", "", "", esc("Total Hours"), esc(emp.summary.totalHours)].join(","));
       lines.push("");
     }
@@ -226,7 +236,7 @@ export default function AdminReportsPage() {
                     {emp.branch_name ? ` · ${emp.branch_name}` : ""}
                   </p>
                 </div>
-                <div className="flex gap-3 text-center text-xs">
+                <div className="flex flex-wrap justify-end gap-x-3 gap-y-1.5 text-center text-xs">
                   <div>
                     <p className="font-semibold text-emerald-600 dark:text-emerald-400">{emp.summary.presentDays}</p>
                     <p className="text-[var(--text-muted)]">Present</p>
@@ -239,6 +249,18 @@ export default function AdminReportsPage() {
                     <p className="font-semibold text-orange-600 dark:text-orange-400">{emp.summary.lateDays}</p>
                     <p className="text-[var(--text-muted)]">Late</p>
                   </div>
+                  {emp.summary.holidayDays > 0 && (
+                    <div>
+                      <p className="font-semibold text-violet-600 dark:text-violet-400">{emp.summary.holidayDays}</p>
+                      <p className="text-[var(--text-muted)]">Holiday</p>
+                    </div>
+                  )}
+                  {emp.summary.leaveDays > 0 && (
+                    <div>
+                      <p className="font-semibold text-sky-600 dark:text-sky-400">{emp.summary.leaveDays}</p>
+                      <p className="text-[var(--text-muted)]">Leave</p>
+                    </div>
+                  )}
                   <div>
                     <p className="font-semibold text-brand-600 dark:text-brand-300">{emp.summary.totalHours}h</p>
                     <p className="text-[var(--text-muted)]">Hours</p>

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { LogIn, LogOut, CheckCircle2, MapPin, Loader2 } from "lucide-react";
+import { LogIn, LogOut, CheckCircle2, MapPin, Loader2, PartyPopper, CalendarOff } from "lucide-react";
 import { CameraCapture } from "@/components/CameraCapture";
 import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -20,6 +20,8 @@ export function PunchScreen() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [branch, setBranch] = useState<Branch | null>(null);
   const [attendance, setAttendance] = useState<Attendance | null>(null);
+  const [holidayToday, setHolidayToday] = useState<string | null>(null);
+  const [leaveToday, setLeaveToday] = useState<{ leaveTypeName: string; isHalfDay: boolean } | null>(null);
 
   const [now, setNow] = useState(new Date());
   const [locating, setLocating] = useState(false);
@@ -42,6 +44,8 @@ export function PunchScreen() {
     setProfile(data.profile ?? null);
     setBranch(data.branch ?? null);
     setAttendance(data.attendance ?? null);
+    setHolidayToday(data.holidayToday ?? null);
+    setLeaveToday(data.leaveToday ?? null);
     setLoading(false);
   };
 
@@ -148,6 +152,21 @@ export function PunchScreen() {
           </>
         )}
       </motion.div>
+
+      {(holidayToday || leaveToday) && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center gap-2.5 rounded-2xl bg-violet-50 p-3 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300"
+        >
+          {holidayToday ? <PartyPopper className="size-4 shrink-0" /> : <CalendarOff className="size-4 shrink-0" />}
+          <p className="text-xs font-medium">
+            {holidayToday
+              ? `Today is a holiday — ${holidayToday}`
+              : `You're on approved leave today — ${leaveToday?.leaveTypeName}${leaveToday?.isHalfDay ? " (half day)" : ""}`}
+          </p>
+        </motion.div>
+      )}
 
       <motion.div
         initial={{ opacity: 0 }}

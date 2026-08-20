@@ -26,6 +26,9 @@ a `public._migrations` table, so each file only ever runs once. Re-running
 | `007_punch_type.sql` | `profiles.punch_type` (`app`/`selfie`) — per-employee control over whether punching in/out asks for a selfie. |
 | `008_employee_phone.sql` | `profiles.phone` — phone number in the employee master, alongside name/email/employee code. |
 | `009_branch_working_hours.sql` | `branches.working_days`/`work_start_time`/`work_end_time` — basis for late-mark and absent detection in reports. |
+| `010_holidays.sql` | `holidays` table (date, name, optional branch scope) — shown to employees and excluded from "Absent" in reports. |
+| `011_leave_types.sql` | `leave_types` master (name, paid/unpaid, informational annual quota). |
+| `012_leave_requests.sql` | `leave_requests` — employee apply / admin approve-reject workflow. |
 
 ## Notes
 

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/supabase/require-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buildMonthAttendance } from "@/lib/attendance";
+import { buildMonthAttendance, type LeaveDayInfo } from "@/lib/attendance";
 import { todayLocalDate } from "@/lib/utils";
+import { expandDateRange } from "@/lib/leave";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAdmin();
@@ -21,12 +22,26 @@ export async function GET(request: NextRequest) {
 
   const admin = createAdminClient();
 
-  const [{ data: profiles, error: profilesError }, { data: branches }, { data: rows, error: rowsError }] =
-    await Promise.all([
-      admin.from("profiles").select("*").order("full_name"),
-      admin.from("branches").select("*"),
-      admin.from("attendance").select("*").gte("attendance_date", startDate).lte("attendance_date", endDate),
-    ]);
+  const [
+    { data: profiles, error: profilesError },
+    { data: branches },
+    { data: rows, error: rowsError },
+    { data: holidayRows },
+    { data: leaveRows },
+    { data: leaveTypes },
+  ] = await Promise.all([
+    admin.from("profiles").select("*").order("full_name"),
+    admin.from("branches").select("*"),
+    admin.from("attendance").select("*").gte("attendance_date", startDate).lte("attendance_date", endDate),
+    admin.from("holidays").select("date, name, branch_id").gte("date", startDate).lte("date", endDate),
+    admin
+      .from("leave_requests")
+      .select("user_id, start_date, end_date, is_half_day, leave_type_id")
+      .eq("status", "approved")
+      .lte("start_date", endDate)
+      .gte("end_date", startDate),
+    admin.from("leave_types").select("id, name"),
+  ]);
 
   if (profilesError || rowsError) {
     return NextResponse.json({ msg: "Could not load attendance" }, { status: 500 });
@@ -39,6 +54,23 @@ export async function GET(request: NextRequest) {
     rowsByUser.get(r.user_id)!.push(r);
   });
 
+  const leaveTypeNameById = new Map((leaveTypes ?? []).map((lt) => [lt.id, lt.name]));
+
+  const holidaysByBranch = new Map<string | null, Map<string, string>>();
+  (holidayRows ?? []).forEach((h) => {
+    if (!holidaysByBranch.has(h.branch_id)) holidaysByBranch.set(h.branch_id, new Map());
+    holidaysByBranch.get(h.branch_id)!.set(h.date, h.name);
+  });
+
+  const approvedLeaveByUser = new Map<string, Map<string, LeaveDayInfo>>();
+  (leaveRows ?? []).forEach((leave) => {
+    if (!approvedLeaveByUser.has(leave.user_id)) approvedLeaveByUser.set(leave.user_id, new Map());
+    const leaveTypeName = leaveTypeNameById.get(leave.leave_type_id) ?? "Leave";
+    expandDateRange(leave.start_date, leave.end_date).forEach((date) => {
+      approvedLeaveByUser.get(leave.user_id)!.set(date, { leaveTypeName, isHalfDay: leave.is_half_day });
+    });
+  });
+
   const relevantProfiles = (profiles ?? []).filter((p) => {
     if (employeeId && p.id !== employeeId) return false;
     if (branchId && p.branch_id !== branchId) return false;
@@ -49,6 +81,16 @@ export async function GET(request: NextRequest) {
 
   const employees = relevantProfiles.map((profile) => {
     const branch = profile.branch_id ? branchById.get(profile.branch_id) : null;
+
+    // Company-wide holidays (branch_id null) plus any scoped to this
+    // employee's own branch.
+    const holidays = new Map<string, string>(holidaysByBranch.get(null) ?? []);
+    if (profile.branch_id) {
+      (holidaysByBranch.get(profile.branch_id) ?? new Map()).forEach((name, date) =>
+        holidays.set(date, name)
+      );
+    }
+
     const { days, summary } = buildMonthAttendance({
       year,
       month,
@@ -57,6 +99,8 @@ export async function GET(request: NextRequest) {
       joinedDate: profile.created_at.slice(0, 10),
       todayIST,
       rows: rowsByUser.get(profile.id) ?? [],
+      holidays,
+      approvedLeave: approvedLeaveByUser.get(profile.id) ?? new Map(),
     });
 
     return {

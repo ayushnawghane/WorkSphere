@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Building2, Users, ClipboardList, LogIn } from "lucide-react";
+import { Building2, Users, ClipboardList, LogIn, CalendarDays, Tags, CalendarCheck2 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { createClient } from "@/lib/supabase/server";
 import { todayLocalDate } from "@/lib/utils";
@@ -7,21 +7,35 @@ import { todayLocalDate } from "@/lib/utils";
 export default async function AdminDashboardPage() {
   const supabase = await createClient();
 
-  const [{ count: activeEmployees }, { count: activeBranches }, { count: punchedInToday }] =
-    await Promise.all([
-      supabase.from("profiles").select("id", { count: "exact", head: true }).eq("is_active", true),
-      supabase.from("branches").select("id", { count: "exact", head: true }).eq("is_active", true),
-      supabase
-        .from("attendance")
-        .select("id", { count: "exact", head: true })
-        .eq("attendance_date", todayLocalDate())
-        .not("punch_in", "is", null),
-    ]);
+  const [
+    { count: activeEmployees },
+    { count: activeBranches },
+    { count: punchedInToday },
+    { count: pendingLeaveRequests },
+  ] = await Promise.all([
+    supabase.from("profiles").select("id", { count: "exact", head: true }).eq("is_active", true),
+    supabase.from("branches").select("id", { count: "exact", head: true }).eq("is_active", true),
+    supabase
+      .from("attendance")
+      .select("id", { count: "exact", head: true })
+      .eq("attendance_date", todayLocalDate())
+      .not("punch_in", "is", null),
+    supabase.from("leave_requests").select("id", { count: "exact", head: true }).eq("status", "pending"),
+  ]);
 
   const links = [
     { href: "/admin/branches", label: "Branches", icon: Building2, desc: "Locations & geofences" },
     { href: "/admin/employees", label: "Employees", icon: Users, desc: "Logins & assignments" },
     { href: "/admin/reports", label: "Reports", icon: ClipboardList, desc: "Attendance across everyone" },
+    { href: "/admin/holidays", label: "Holidays", icon: CalendarDays, desc: "Company holiday calendar" },
+    { href: "/admin/leave-types", label: "Leave Types", icon: Tags, desc: "Casual, sick, and other leave" },
+    {
+      href: "/admin/leave-requests",
+      label: "Leave Requests",
+      icon: CalendarCheck2,
+      desc: "Review and approve time off",
+      badge: pendingLeaveRequests ?? 0,
+    },
   ];
 
   return (
@@ -44,16 +58,21 @@ export default async function AdminDashboardPage() {
       </div>
 
       <div className="flex flex-col gap-3">
-        {links.map(({ href, label, icon: Icon, desc }) => (
+        {links.map(({ href, label, icon: Icon, desc, badge }) => (
           <Link key={href} href={href}>
             <Card className="flex items-center gap-3 p-4 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]">
               <div className="flex size-10 items-center justify-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-300">
                 <Icon className="size-5" />
               </div>
-              <div>
+              <div className="flex-1">
                 <p className="text-sm font-semibold text-[var(--text)]">{label}</p>
                 <p className="text-xs text-[var(--text-muted)]">{desc}</p>
               </div>
+              {Boolean(badge) && (
+                <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-semibold text-white">
+                  {badge}
+                </span>
+              )}
             </Card>
           </Link>
         ))}

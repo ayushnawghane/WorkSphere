@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Home, History, User, ShieldCheck } from "lucide-react";
+import { Home, History, CalendarOff, User, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const BASE_ITEMS = [
   { href: "/home", label: "Home", icon: Home },
   { href: "/history", label: "History", icon: History },
+  { href: "/leave", label: "Leave", icon: CalendarOff },
   { href: "/profile", label: "Profile", icon: User },
 ];
 

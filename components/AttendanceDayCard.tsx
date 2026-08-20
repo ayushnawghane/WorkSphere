@@ -25,12 +25,32 @@ const STATUS_STYLES: Record<DayEntry["status"], { label: string; badge: string; 
     badge: "bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-400",
     tile: "bg-gradient-to-br from-slate-400 to-slate-300",
   },
+  holiday: {
+    label: "Holiday",
+    badge: "bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-400",
+    tile: "bg-gradient-to-br from-violet-500 to-purple-400",
+  },
+  leave: {
+    label: "Leave",
+    badge: "bg-sky-50 text-sky-600 dark:bg-sky-500/10 dark:text-sky-400",
+    tile: "bg-gradient-to-br from-sky-500 to-cyan-400",
+  },
 };
 
 export function AttendanceDayCard({ entry }: { entry: DayEntry }) {
   const day = new Date(entry.date + "T00:00:00");
   const weekday = formatWeekday(day);
   const style = STATUS_STYLES[entry.status];
+
+  const extraName = entry.holidayName
+    ? entry.holidayName
+    : entry.leaveInfo
+      ? `${entry.leaveInfo.leaveTypeName}${entry.leaveInfo.isHalfDay ? " (half day)" : ""}`
+      : null;
+
+  // No punch that day (pure holiday/leave/absent/off) — show the reason
+  // instead of a pair of "--:--" punch rows.
+  const showPunchRows = Boolean(entry.attendance?.punch_in);
 
   return (
     <motion.div initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.25 }}>
@@ -44,14 +64,21 @@ export function AttendanceDayCard({ entry }: { entry: DayEntry }) {
 
         <div className="flex flex-1 items-center justify-between">
           <div>
-            <div className="flex items-center gap-1 text-sm font-medium text-[var(--text)]">
-              <LogIn className="size-3.5 text-[var(--text-muted)]" />
-              {formatTime(entry.attendance?.punch_in ?? null)}
-            </div>
-            <div className="mt-1 flex items-center gap-1 text-sm font-medium text-[var(--text)]">
-              <LogOut className="size-3.5 text-[var(--text-muted)]" />
-              {formatTime(entry.attendance?.punch_out ?? null)}
-            </div>
+            {showPunchRows ? (
+              <>
+                <div className="flex items-center gap-1 text-sm font-medium text-[var(--text)]">
+                  <LogIn className="size-3.5 text-[var(--text-muted)]" />
+                  {formatTime(entry.attendance?.punch_in ?? null)}
+                </div>
+                <div className="mt-1 flex items-center gap-1 text-sm font-medium text-[var(--text)]">
+                  <LogOut className="size-3.5 text-[var(--text-muted)]" />
+                  {formatTime(entry.attendance?.punch_out ?? null)}
+                </div>
+                {extraName && <p className="mt-1 text-xs text-[var(--text-muted)]">{extraName}</p>}
+              </>
+            ) : (
+              <p className="text-sm font-medium text-[var(--text)]">{extraName ?? style.label}</p>
+            )}
           </div>
 
           <div className="flex flex-col items-end gap-1">
